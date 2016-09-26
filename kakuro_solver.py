@@ -15,21 +15,27 @@ class Memoize:
       self.memo[args] = self.f(*args)
     return self.memo[args]
 
-
+@Memoize
 def get_sums(target, count):
     """Return a list of all sums to `target` with `count`
     coefficients. This will include all possible ordering
     of coefficients.
     """
     if count == 2:
-        sums = [[target - x, x] for x in range(1, target - 1) if target - x != x]
+        sums = [
+          [target - x, x] for x in range(1, target - 1)
+          if target - x != x and x < 10 and (target - x) < 10
+        ]
     else:
         sums = []
         for x in range(1, target - 1):
-            sums.extend([sum + [x] for sum in get_sums(target - x, count - 1) if x not in sum])
+            sums.extend(
+              [sum + [x] for sum in get_sums(target - x, count - 1) if x not in sum and x < 10]
+            )
     return sums
 
 
+@Memoize
 def get_unique_sums(target, count):
     """Return a set of sums to `target` with `count`
     coefficients. The coefficients for each sum are ordered
@@ -39,15 +45,7 @@ def get_unique_sums(target, count):
     unique_sums = set()
     for sum in sums:
         unique_sums.add(tuple(sorted(sum)))
-    return unique_sums
-
-
-@Memoize
-def get_unique_digit_sums(target, count):
-  """Filter out any sums with coefficients greater than 9."""
-  def valid_seq(seq):
-    return (len([num for num in seq if num < 10]) == len(seq))
-  return [sum_seq for sum_seq in get_unique_sums(target, count) if valid_seq(sum_seq)]
+    return list(unique_sums)
 
 
 def combinations(nums):
@@ -216,7 +214,7 @@ class Run(object):
     self.total = total
     self.intersect = solver.horizontal_runs if vert else solver.vertical_runs
     self.__class__.min_remaining = len(solver.horizontal_runs)
-    self.sequences = get_unique_digit_sums(total, length)
+    self.sequences = get_unique_sums(total, length)
     if len(self.sequences) == 0:
       raise Exception("Error at %s, no digit sequences found" % (start,))
     self.digit_coords = {x: set() for x in range(1, 10)}
@@ -283,9 +281,8 @@ class Run(object):
           remaining -= self.solver.solution[coord]
           length -= 1
       if length == 2:
-        sub_sequences = get_unique_digit_sums(remaining, length)
-        for sequence in sub_sequences:
-          combos.extend(combinations(sequence))
+        sub_sequences = get_unique_sums(remaining, length)
+        combos.extend(get_sums(remaining, length))
     if len(combos) <= limit and len(combos) != 0:
       self._test(combos)
     return (len(combos) <= limit)
