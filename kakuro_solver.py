@@ -80,7 +80,6 @@ def combinations(nums):
 
 
 class Solver(object):
-    # TODO: Check how to solve a puzzle with a smaller grid.
 
     # Mapping of coordinates to horizontal runs
     horizontal_runs = {}
@@ -104,33 +103,43 @@ class Solver(object):
     # Height of the grid
     height = 0
 
-    def __init__(self, puzzle_file):
+    def __init__(self, puzzle_file=None, puzzle=None):
         """
         Read text file containing puzzle.
         """
+
+        if puzzle_file is not None:
+            self.puzzle = self.read_file(puzzle_file)
+        elif puzzle is not None:
+            self.puzzle = puzzle
         vert = False
         columns = []
-        with open(puzzle_file, 'r') as in_file:
-            for line_no, line in enumerate(in_file):
-                # Vertical runs separated by new-line
-                if len(line.strip()) == 0:
-                    vert = True
+
+        for line_no, line in enumerate(self.puzzle):
+            # Vertical runs separated by new-line
+            if len(line.strip()) == 0:
+                vert = True
+            else:
+                cells = line.strip().split(',')
+                self.width = len(cells)
+                if vert:
+                    if len(columns) == 0:
+                        columns = [[] for _ in cells]  # Initialize empty
+                    for idx, cell in enumerate(cells):
+                        columns[idx].append(cell)
                 else:
-                    cells = line.strip().split(',')
-                    self.width = len(cells)
-                    if vert:
-                        if len(columns) == 0:
-                            columns = [[] for _ in cells]  # Initialize empty
-                        for idx, cell in enumerate(cells):
-                            columns[idx].append(cell)
-                    else:
-                        # Convert rows to runs
-                        self.parse_sequence(
-                            line_no, cells, self.horizontal_runs, vert)
+                    # Convert rows to runs
+                    self.parse_sequence(
+                        line_no, cells, self.horizontal_runs, vert)
         self.height = len(columns[0])
         # Convert columns to runs
         for idx, column in enumerate(columns):
             self.parse_sequence(idx, column, self.vertical_runs, vert)
+
+    def read_file(self, puzzle_file):
+        with open(puzzle_file, 'r') as in_file:
+            puzzle = list(in_file)
+        return puzzle
 
     def add_run(self, start, length, total, run_dict, vert):
         """
@@ -225,12 +234,19 @@ class Solver(object):
             self.add_solution()
         self.print_solutions()
 
+    def get_complete_solutions(self):
+        complete_solutions = []
+        for key in self.solutions:
+            if key not in self.partial:
+                complete_solutions.append(self.solutions[key])
+        return complete_solutions
+
     def print_solutions(self):
         idx = 1
         for key in self.solutions:
             if key in self.partial and Run.min_remaining != self.partial[key]:
                 continue
-            print("Solution %s:" % idx)
+            print(f"Solution {idx}:")
             for y in range(self.height):
                 for x in range(self.width):
                     if (x, y) in self.solutions[key]:
@@ -351,7 +367,6 @@ class Run(object):
         """Fill in numbers into the run and return the number
         of digits found.
         """
-        # TODO: check if this line is needed
         self.digit_coords = {x: set() for x in range(1, 10)}
         found = self._get_found()
         if len(found) != len(set(found)):  # Duplicate cells in solution?
@@ -432,6 +447,7 @@ if __name__ == "__main__":
 
     try:
         solver.solve()
+        solutions = solver.get_complete_solutions()
     except:
         solver.solutions[0] = solver.solution
         solver.print_solutions()
