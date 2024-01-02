@@ -174,19 +174,22 @@ class Solver(object):
         if total != 0:
             self.add_run(start, length, total, run_dict, vert)
 
+    def sort_current_solution(self):
+        return dict(sorted(self.solution.items()))
+
     def add_solution(self, remaining=0):
         """Add a solution to the solutions. If numbers
         are missing add it to the partial solutions.
         Return `True` if a new solution was added.
         """
         new_solution = False
+        solution = self.sort_current_solution()
         m = hashlib.md5()
-        # m.update(str(self.solution.values()))
-        m.update(str(list(self.solution.values())).encode('utf-8'))  # Python 3
+        m.update(str(list(solution.values())).encode('utf-8'))
         if m.hexdigest() not in self.solutions:
             if remaining > 0:
                 self.partial[m.hexdigest()] = remaining
-            self.solutions[m.hexdigest()] = self.solution.copy()
+            self.solutions[m.hexdigest()] = solution.copy()
             new_solution = True
         return new_solution
 
@@ -348,9 +351,10 @@ class Run(object):
         """Fill in numbers into the run and return the number
         of digits found.
         """
+        # TODO: check if this line is needed
         self.digit_coords = {x: set() for x in range(1, 10)}
         found = self._get_found()
-        if len(found) != len(set(found)):
+        if len(found) != len(set(found)):  # Duplicate cells in solution?
             return -1
         digits1, digits2 = self.get_digits()  # All and required digits
         filled_count = 0
@@ -413,10 +417,10 @@ class Run(object):
                     idx += 1
 
 
-DEBUG = True
+DEBUG = False
 
 if __name__ == "__main__":
-    if (len(sys.argv) == 3 and sys.argv[2] == '--debug') or DEBUG:
+    if (len(sys.argv) == 3 and sys.argv[2] == '--debug'):
         # Enable debug output
         logging.basicConfig(level=logging.DEBUG,
                             format="Debug: %(message)s", stream=sys.stdout)
