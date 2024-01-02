@@ -1,17 +1,25 @@
 #!/usr/bin/env python
-import math
+
+"""
+Source: https://github.com/s-knibbs/kakuro-solver
+"""
 import sys
 import logging
 import hashlib
 
 
 class Memoize:
+    """
+    Remember previously computed results of methods.
+    https://stackoverflow.com/questions/1988804/what-is-memoization-and-how-can-i-use-it-in-python
+    """
+
     def __init__(self, f):
         self.f = f
         self.memo = {}
 
     def __call__(self, *args):
-        if not args in self.memo:
+        if args not in self.memo:
             self.memo[args] = self.f(*args)
         return self.memo[args]
 
@@ -21,18 +29,26 @@ def get_sums(target, count):
     """Return a list of all sums to `target` with `count`
     coefficients. This will include all possible ordering
     of coefficients.
+
+    Count is the number of cells, target is the target value that the sum
+    of all cell values should be equal to.
+    E.g.: 3 cells, the sum should be 7, then count = 3, target = 7.
+    Sums is the list that contains all possible combinations that satisfy
+    the conditions.
     """
+
+    # Only two cells
     if count == 2:
-        sums = [
-            [target - x, x] for x in range(1, target - 1)
-            if target - x != x and x < 10 and (target - x) < 10
-        ]
+        sums = [[target - x, x] for x in range(1, target - 1)
+                if (target - x != x) and (x < 10) and ((target - x) < 10)]
+
+    # More than two cells
     else:
         sums = []
         for x in range(1, target - 1):
             sums.extend(
-                [sum + [x]
-                    for sum in get_sums(target - x, count - 1) if x not in sum and x < 10]
+                [sum + [x] for sum in get_sums(target - x, count - 1)
+                 if x not in sum and x < 10]
             )
     return sums
 
@@ -64,26 +80,34 @@ def combinations(nums):
 
 
 class Solver(object):
+    # TODO: Check how to solve a puzzle with a smaller grid.
+
     # Mapping of coordinates to horizontal runs
     horizontal_runs = {}
     # Mapping of coordinates to vertical runs
     vertical_runs = {}
+
     # List of unique vertical runs
     unique_runs_v = []
     # List of unique horizontal runs
     unique_runs_h = []
+
     # The current solution
     solution = {}
     # Map of solution md5-hashes to solutions
     solutions = {}
     # Map of partial solution md5-hashes to solutions
     partial = {}
+
     # Width of the grid
     width = 0
     # Height of the grid
     height = 0
 
     def __init__(self, puzzle_file):
+        """
+        Read text file containing puzzle.
+        """
         vert = False
         columns = []
         with open(puzzle_file, 'r') as in_file:
@@ -96,40 +120,51 @@ class Solver(object):
                     self.width = len(cells)
                     if vert:
                         if len(columns) == 0:
-                            columns = [[] for _ in cells]
+                            columns = [[] for _ in cells]  # Initialize empty
                         for idx, cell in enumerate(cells):
                             columns[idx].append(cell)
                     else:
+                        # Convert rows to runs
                         self.parse_sequence(
                             line_no, cells, self.horizontal_runs, vert)
         self.height = len(columns[0])
+        # Convert columns to runs
         for idx, column in enumerate(columns):
             self.parse_sequence(idx, column, self.vertical_runs, vert)
 
     def add_run(self, start, length, total, run_dict, vert):
+        """
+        Store runs for all cels, and store unique runs.
+        """
         if length == 0:
             raise Exception('Error in puzzle at: %s' % (start,))
         run = Run(
             total, length, start, vert, self
         )
-        idx = 1 if vert else 0
+        idx = 1 if vert else 0  # If vertical, iterate second coordinate
         if vert:
             self.unique_runs_v.append(run)
         else:
             self.unique_runs_h.append(run)
         # Generate the coordinate mapping
+        # Runs are added to all cells for which the run is active.
+        # This is saved in self.horizontal_runs and self.vertical_runs
         for _ in range(length):
             run_dict[tuple(start)] = run
             start[idx] += 1
 
     def parse_sequence(self, idx, cells, run_dict, vert):
+        """
+        Convert rows and columns into runs.
+        """
         total = 0
         start = []
         length = 0
         for pitch, cell in enumerate(cells):
             if cell.isdigit():
-                if int(cell) > 0:
+                if int(cell) > 0:  # infocell detected
                     if total != 0:
+                        # New run detected, add previous run
                         self.add_run(start, length, total, run_dict, vert)
                     total = int(cell)
                     length = 0
@@ -159,7 +194,8 @@ class Solver(object):
         iterations = 0
         current_filled = 1
         limit = 2
-        while len(self.solution) < len(self.horizontal_runs) and iterations < 45:
+        while (len(self.solution) < len(self.horizontal_runs)
+               and iterations < 45):
             all_tested = True
             iterations += 1
             last_filled = current_filled
@@ -177,8 +213,8 @@ class Solver(object):
                     else:
                         break
                 limit *= 2
-        logging.debug("Limit: %s" % limit)
-        logging.debug("Iterations: %s" % iterations)
+        logging.debug(f"Limit: {limit}")
+        logging.debug(f"Iterations: {iterations}")
         if len(self.solution) != len(self.horizontal_runs):
             print("No unique solution found.")
         else:
@@ -196,7 +232,8 @@ class Solver(object):
                 for x in range(self.width):
                     if (x, y) in self.solutions[key]:
                         print(self.solutions[key][(x, y)], end=' ')
-                    elif (x, y) not in self.solutions[key] and (x, y) in self.horizontal_runs:
+                    elif ((x, y) not in self.solutions[key]
+                          and (x, y) in self.horizontal_runs):
                         print("X ", end='')
                     else:
                         print("# ", end='')
@@ -205,7 +242,8 @@ class Solver(object):
 
 
 class Run(object):
-    """Represents a single vertical or horizontal run of numbers within the grid.
+    """Represents a single vertical or horizontal
+    run of numbers within the grid.
     """
     coord_changes = []
     h_guess_coords = {}
@@ -216,21 +254,23 @@ class Run(object):
         self.solver = solver
         self.length = length
         self.total = total
-        self.intersect = solver.horizontal_runs if vert else solver.vertical_runs
-        self.__class__.min_remaining = len(solver.horizontal_runs)
+        self.intersect = (solver.horizontal_runs
+                          if vert else solver.vertical_runs)
+        self.__class__.min_remaining = len(solver.horizontal_runs)  # nr cells
         self.sequences = get_unique_sums(total, length)
         if len(self.sequences) == 0:
-            raise Exception("Error at %s, no digit sequences found" % (start,))
+            raise Exception("Error at {start}, no digit sequences found")
         self.digit_coords = {x: set() for x in range(1, 10)}
         (a, b) = (0, 1) if vert else (1, 0)
         self.coords = [(start[0] + a * x, start[1] + b * x)
                        for x in range(length)]
 
     def __str__(self):
-        return '(T: %d, L: %d) - Sequences: %s' % (self.total, self.length, self.sequences)
+        return f'(T: {self.total}, L: {self.length}) - Seq.: {self.sequences}'
 
     def get_digits(self):
-        """Return all the possible digits (excluding already found digits) as a tuple of:
+        """Return all the possible digits (excluding already found digits)
+        as a tuple of:
 
         all_digits - The set containing the union of all possible digits.
         required_digits - Set of digits common to all sequences
@@ -261,7 +301,7 @@ class Run(object):
         coord = None
         while coord != guess_coord:
             coord = self.coord_changes.pop()
-            value = self.solver.solution[coord]
+            # value = self.solver.solution[coord]
             del self.solver.solution[coord]
 
     def add_found(self, coord, found, testing=False):
@@ -286,7 +326,7 @@ class Run(object):
                     remaining -= self.solver.solution[coord]
                     length -= 1
             if length == 2:
-                sub_sequences = get_unique_sums(remaining, length)
+                # sub_sequences = get_unique_sums(remaining, length)
                 combos.extend(get_sums(remaining, length))
         if len(combos) <= limit and len(combos) != 0:
             self._test(combos)
@@ -300,7 +340,7 @@ class Run(object):
                 coord = coords.pop()
                 if coord not in self.solver.solution:
                     count += 1
-                    logging.debug("Adding: %s %s" % (coord, digit))
+                    logging.debug(f"Adding: {coord} {digit}")
                     self.add_found(coord, digit)
         return count
 
@@ -312,15 +352,18 @@ class Run(object):
         found = self._get_found()
         if len(found) != len(set(found)):
             return -1
-        digits1, digits2 = self.get_digits()
+        digits1, digits2 = self.get_digits()  # All and required digits
         filled_count = 0
         for coord in self.coords:
             if coord not in self.solver.solution:
+                # All and required digits of intersection
+                # intersection is vertical run for horizontal run, and vice
+                # versa.
                 digits3, digits4 = self.intersect[coord].get_digits()
                 common = digits3 & digits1
                 if len(common) == 1:
                     found = common.pop()
-                    logging.debug("Found: %s %s" % (coord, found))
+                    logging.debug(f"Found: {coord} {found}")
                     self.add_found(coord, found, test)
                     if found in digits2:
                         digits2.remove(found)
@@ -329,7 +372,8 @@ class Run(object):
                     return -1
                 for digit in common:
                     self.digit_coords[digit].add(coord)
-                if test and filled_count != 0 and self.intersect[coord].fill_cells(test) == -1:
+                if (test and filled_count != 0
+                        and self.intersect[coord].fill_cells(test) == -1):
                     return -1
         filled_count += self._fill_unique(digits2)
         return filled_count
@@ -354,13 +398,14 @@ class Run(object):
             if len(self.intersect) == len(self.solver.solution):
                 self.solver.add_solution()
                 self.__class__.min_remaining = 0
-            elif (len(self.intersect) - len(self.solver.solution)) <= self.min_remaining:
+            elif ((len(self.intersect) - len(self.solver.solution))
+                  <= self.min_remaining):
                 self.__class__.min_remaining = (
                     len(self.intersect) - len(self.solver.solution))
                 self.solver.add_solution(self.min_remaining)
             self.undo(test_coords[0])
         if len(valid) == 1:
-            logging.debug("Adding: %s %s" % (self.coords[0], valid[0]))
+            logging.debug(f"Adding: {self.coords[0]} {valid[0]}")
             idx = 0
             for run_coord in self.coords:
                 if run_coord not in self.solver.solution:
@@ -368,15 +413,18 @@ class Run(object):
                     idx += 1
 
 
+DEBUG = True
+
 if __name__ == "__main__":
-    if len(sys.argv) == 3 and sys.argv[2] == '--debug':
+    if (len(sys.argv) == 3 and sys.argv[2] == '--debug') or DEBUG:
         # Enable debug output
         logging.basicConfig(level=logging.DEBUG,
                             format="Debug: %(message)s", stream=sys.stdout)
 
     # solver = Solver(sys.argv[1])
     # solver = Solver('examples/kakuro1.txt')
-    solver = Solver('examples/kakuro_5x4.txt')
+    # solver = Solver('examples/kakuro_5x4.txt')
+    solver = Solver('examples/kakuro_5x4_short.txt')
 
     try:
         solver.solve()
